@@ -91,11 +91,11 @@ http://private-git-host:3000/group/qm-skills.git
 
 - 第一种是 SSH/scp 形式，不是 HTTPS。
 - 第二种既是 HTTP，又指向私有 IP。
-- 即使改成 `https://192.168.122.55:3000/...`，默认仍会被私网地址校验拒绝。
+- 即使改成 `https://private-git-host:3000/...`，默认仍会被私网地址校验拒绝。
 
 如需正式支持自建 Git，建议做受控扩展，而不是全局关闭私网保护：
 
-1. 为 Git 服务配置受信 HTTPS 域名，例如 `git.v-summit.com`，由内网反向代理终止 TLS。
+1. 为 Git 服务配置受信 HTTPS 域名，例如 `git.example.internal`，由内网反向代理终止 TLS。
 2. 在 QM 增加管理员配置的私有 Git 主机/端口 allowlist，只放行明确主机，例如 `git.example.internal:443`。
 3. 继续禁止重定向到未授权主机，并在 DNS 解析后再次校验目标地址。
 4. 私有仓库通过 QM 服务端保存的只读 Deploy Token/Deploy Key 取用；不要把 `Administrator`、密码或 Token 写进仓库 URL。
@@ -112,6 +112,7 @@ http://private-git-host:3000/group/qm-skills.git
 | Slug | `tavily` |
 | Display name | `Tavily Search` |
 | Delivery | `Broker` |
+| Env var | 留空；输入框中的 `STEEL_API_KEY` 是示例占位符，只在 `Sandbox env` 投递时使用 |
 | Destination host | `api.tavily.com` |
 | Secret | Tavily API Key，只在此处录入 |
 | Authentication header | `Authorization`，留空也使用该默认值 |
@@ -131,7 +132,7 @@ Paths: /search
 Secret: Stored secret retained / Secret set
 ```
 
-不要使用 **Sandbox env**。Env 交付会把凭据注入所有内部会话，不能用个人或团队 ACL 精确控制。
+不要使用 **Sandbox env**。Env 交付会把凭据注入 Sandbox；Broker 模式下该字段不参与调用，密钥保留在 Core 内，并可通过个人或团队 ACL 精确控制。
 
 ## 5. 权限控制
 
@@ -143,13 +144,13 @@ Secret: Stored secret retained / Secret set
 2. 输入用户的 principal ID，例如：
 
    ```text
-   william.wan@v-summit.com
+   user@example.com
    ```
 
 3. 在 Effective capability 中确认 Access 显示：
 
    ```text
-   personal:william.wan@v-summit.com
+   personal:user@example.com
    ```
 
 4. 保存后，凭据列表应显示 `1 principal`，而不是 `Organization-wide`。
@@ -225,6 +226,8 @@ not_entitled
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
 | `AGENT_CREDENTIAL_TOKEN` 缺失 | 当前会话没有任何可用共享 Broker 凭据 | 检查 personal/team grant，并新建会话 |
+| `AGENT_API_URL` 缺失 | Core 未配置供 Sandbox 回连的 `PUBLIC_API_URL` | 设置为 Sandbox 可访问的 Core URL，重启 Core 后新建会话 |
+| Broker URL 连接失败 | `PUBLIC_API_URL` 在 rootless Docker 内不可达；Linux 上的 `host.docker.internal` 映射不一定能回到宿主机 | 从 Sandbox 对候选地址执行只读健康检查，使用可达的宿主机内网地址；不要改成对公网开放的未保护端口 |
 | `not_entitled` | 当前 principal/Scope 未获 `tavily` 授权 | 修正 Share with 范围 |
 | Tavily 401/403 | 保存的 API Key 无效或失效 | 在后台替换 Secret |
 | Tavily 429 | 额度或速率限制 | 降低调用频率、检查套餐 |
