@@ -2,6 +2,8 @@
 
 Skills adapted for the QM agent platform.
 
+管理员操作、权限控制、测试与排障请参阅 [QM Skill 添加、凭据配置与权限控制指南](docs/QM_SKILL_ADMIN_GUIDE.md)。
+
 ## Tavily search
 
 The `tavily` skill lets an agent search the web through Tavily without exposing the Tavily API key to the sandbox. The script calls QM's service credential broker, which injects the key on the server and enforces the configured user/team grant, hostname, HTTP method, and path restrictions.
