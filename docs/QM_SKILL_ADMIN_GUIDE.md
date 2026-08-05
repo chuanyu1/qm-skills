@@ -209,7 +209,7 @@ not_entitled
 4. 凭据列表的 successful uses 从 0 增加。
 5. Audit 中出现对应 principal、Scope 和 credential 使用记录。
 
-如果使用 MiniMax 等 OpenAI 兼容模型，先在会话日志的 **View context sent to the model** 中确认 `tavily` 出现在 `## Skills` 清单。文件型 Skill 不会显示为一个名为 `tavily` 的函数工具；模型应使用 `execute` 读取 `skills/tavily/SKILL.md`，再运行其中的 Shell 命令。若模型误报“没有 Tavily 工具”，应加强 Skill 的 frontmatter `description`，明确这一调用方式，然后同步 Pack 并新建会话复测。
+如果使用 MiniMax 等 OpenAI 兼容模型，先在会话日志的 **View context sent to the model** 中确认 `tavily` 出现在 `## Skills` 清单。文件型 Skill 不会显示为一个名为 `tavily` 的函数工具。部分模型会忽略“先读取 SKILL.md”的通用规则，因此 frontmatter `description` 应直接给出安全入口命令，并明确禁止探测环境变量、安装同名 SDK 或索取原始密钥；详细步骤仍保留在 `SKILL.md`。同步 Pack 后必须新建会话复测。
 
 ### 未授权用户反向测试
 

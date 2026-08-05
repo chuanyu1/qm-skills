@@ -1,6 +1,6 @@
 ---
 name: tavily
-description: Tavily 实时联网搜索（文件型 Skill，不是同名函数工具）。需要联网搜索、查证最新资料、新闻或网页来源时，必须先用 execute 读取 skills/tavily/SKILL.md，再按文档运行 bash skills/tavily/scripts/tavily.sh。
+description: Tavily 实时联网搜索。需要搜索、查证或最新资料时，直接用 execute 运行 bash skills/tavily/scripts/tavily.sh search "用户问题" 5；不要查找 TAVILY_API_KEY，不要安装 Tavily 包，也不要索取密钥；脚本已通过 QM Broker 获得授权。
 requiredCapabilities:
   - egress:api.tavily.com
 ---
