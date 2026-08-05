@@ -78,6 +78,31 @@ https://ghfast.top/https://github.com/chuanyu1/qm-skills.git
 
 第三方加速地址会看到公开仓库 URL，因此只应用于公开仓库。私有仓库不要经过公共镜像，应使用组织认可的网络代理和 Deploy Token。
 
+### 内网自建 Git 仓库
+
+当前 QM 的 Skill Pack 拉取器只接受**不含用户名、密码或 Token 的 HTTPS URL**，并会拒绝解析到内网、回环或链路本地地址的主机。这是防止管理员界面的 Git URL 被利用进行服务端请求伪造（SSRF）的安全边界。
+
+因此下面两种地址均不能直接注册：
+
+```text
+git-user@private-git-host:group/qm-skills.git
+http://private-git-host:3000/group/qm-skills.git
+```
+
+- 第一种是 SSH/scp 形式，不是 HTTPS。
+- 第二种既是 HTTP，又指向私有 IP。
+- 即使改成 `https://192.168.122.55:3000/...`，默认仍会被私网地址校验拒绝。
+
+如需正式支持自建 Git，建议做受控扩展，而不是全局关闭私网保护：
+
+1. 为 Git 服务配置受信 HTTPS 域名，例如 `git.v-summit.com`，由内网反向代理终止 TLS。
+2. 在 QM 增加管理员配置的私有 Git 主机/端口 allowlist，只放行明确主机，例如 `git.example.internal:443`。
+3. 继续禁止重定向到未授权主机，并在 DNS 解析后再次校验目标地址。
+4. 私有仓库通过 QM 服务端保存的只读 Deploy Token/Deploy Key 取用；不要把 `Administrator`、密码或 Token 写进仓库 URL。
+5. 对该 allowlist、凭据使用、同步与失败事件保留审计日志。
+
+在完成该扩展前，可继续把公开 Skill 镜像到 GitHub；私有内容不要经过公共 GitHub 加速服务。
+
 ## 4. 配置 Tavily 服务凭据
 
 进入 **Admin → Governance → Credentials → Shared service credentials**，添加或编辑：
@@ -183,6 +208,8 @@ not_entitled
 3. 返回 Tavily 搜索结果和真实来源 URL。
 4. 凭据列表的 successful uses 从 0 增加。
 5. Audit 中出现对应 principal、Scope 和 credential 使用记录。
+
+如果使用 MiniMax 等 OpenAI 兼容模型，先在会话日志的 **View context sent to the model** 中确认 `tavily` 出现在 `## Skills` 清单。文件型 Skill 不会显示为一个名为 `tavily` 的函数工具；模型应使用 `execute` 读取 `skills/tavily/SKILL.md`，再运行其中的 Shell 命令。若模型误报“没有 Tavily 工具”，应加强 Skill 的 frontmatter `description`，明确这一调用方式，然后同步 Pack 并新建会话复测。
 
 ### 未授权用户反向测试
 

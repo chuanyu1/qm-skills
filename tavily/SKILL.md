@@ -1,6 +1,6 @@
 ---
 name: tavily
-description: 使用 Tavily 搜索互联网并获取实时信息。用户要求搜索、查证、获取最新资料、新闻或网页来源时使用。
+description: Tavily 实时联网搜索（文件型 Skill，不是同名函数工具）。需要联网搜索、查证最新资料、新闻或网页来源时，必须先用 execute 读取 skills/tavily/SKILL.md，再按文档运行 bash skills/tavily/scripts/tavily.sh。
 requiredCapabilities:
   - egress:api.tavily.com
 ---
