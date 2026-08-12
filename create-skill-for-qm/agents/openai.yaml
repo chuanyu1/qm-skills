@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Personal Skill for QM"
+  short_description: "Register durable personal QM skills through the platform API"
+  default_prompt: "Use $create-skill-for-qm to create and verify a personal QM skill."

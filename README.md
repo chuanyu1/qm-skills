@@ -4,6 +4,18 @@ Skills adapted for the QM agent platform.
 
 管理员操作、权限控制、测试与排障请参阅 [QM Skill 添加、凭据配置与权限控制指南](docs/QM_SKILL_ADMIN_GUIDE.md)。
 
+## Create personal skill for QM
+
+The `create-skill-for-qm` foundation skill teaches an agent to register a durable, single-file personal Skill through QM's self-API and verify that it is published in the current `personal:*` scope. It deliberately rejects channel/group scope and never treats files written into the transient `skills/` projection as an installed Skill.
+
+Import `create-skill-for-qm` into the organization scope so every authorized user can invoke it. Users should run the creation request from their personal chat; the resulting native Skill then appears in that exact account's `/skills` page. Different email principals do not share personal Skills.
+
+The current native API accepts only `name`, `description`, and Markdown `body`. Skills that require `scripts/`, `references/`, or `assets/` must remain Git Skill Packs and be imported by an administrator into the intended scope.
+
+Example request after import:
+
+> 请使用 create-skill-for-qm，为我创建一个个人 Skill：在交付网页链接前检查 HTTP 状态、Content-Type 和页面标题，并把平台返回的 Skill ID 和 personal scope 告诉我。
+
 ## Tavily search
 
 The `tavily` skill lets an agent search the web through Tavily without exposing the Tavily API key to the sandbox. The script calls QM's service credential broker, which injects the key on the server and enforces the configured user/team grant, hostname, HTTP method, and path restrictions.

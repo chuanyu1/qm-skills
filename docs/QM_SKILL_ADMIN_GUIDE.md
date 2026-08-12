@@ -62,6 +62,23 @@ https://github.com/chuanyu1/qm-skills.git
 
 固定提交可实现可重复部署；跟随 `main` 则便于后续直接 Sync。
 
+### 导入个人 Skill 创建器
+
+`create-skill-for-qm` 是组织级基础 Skill，负责指导 Agent 通过 QM self-API 创建数据库持久化的单文件个人 Skill。建议管理员将它导入 `org:local`，让所有已授权用户都能使用创建流程；它本身不会让用户获得组织管理权限。
+
+导入并新建个人会话后，用以下请求验收：
+
+> 请使用 create-skill-for-qm，为我创建一个名为 check-public-link 的个人 Skill，并返回平台生成的 Skill ID、published 状态和 personal scope。
+
+验收时确认：
+
+1. Agent 返回的平台记录包含 `verified: true`、`status: published` 和 `scopeId: personal:<当前邮箱>`。
+2. 当前邮箱登录 `/skills` 后能看到新 Skill；切换成另一个邮箱后不应看到它。
+3. 新建个人会话后，工作区中出现 `skills/check-public-link/SKILL.md`。
+4. 在频道或群聊内执行时，创建器应拒绝并提示改到个人会话，避免把共享范围误报为个人范围。
+
+`POST /v1/skills` 当前只支持 `name`、`description` 和 `body`。需要脚本或附件的 Skill 仍必须作为 Git Skill Pack 由管理员导入到指定范围。
+
 ### GitHub 链路超时
 
 如果 Status 显示：
