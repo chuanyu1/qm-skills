@@ -18,7 +18,7 @@ Example request after import:
 
 ## MinerU v3 PDF parser
 
-The `mineru-v3-pdf-parser` skill parses PDF and image files through the internal MinerU v3 API, with an OCR-first workflow for scanned documents. It submits asynchronous tasks, polls them to completion, and writes verified UTF-8 Markdown plus the raw JSON response and task metadata.
+The `mineru-v3-pdf-parser` skill parses PDF and image files through the internal MinerU v3 API, with an OCR-first workflow for scanned documents. It uses resumable `submit`/`resume` calls instead of holding one Agent execution open, then writes verified UTF-8 Markdown plus the raw JSON response and task metadata.
 
 The repository contains no internal hostname, port, or credential. A QM administrator must inject the private service base URL as `MINERU_API_URL` through Sandbox env delivery, then import the Skill into the intended scopes. PDF contents are sent to that configured service, so only upload documents the user explicitly asked to process.
 

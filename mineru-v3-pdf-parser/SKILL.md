@@ -1,11 +1,11 @@
 ---
 name: mineru-v3-pdf-parser
-description: 使用内网 MinerU v3 API 将 PDF 或图片解析为结构化 Markdown，支持 OCR、表格和公式识别。用户要求读取、提取、OCR、转换、总结或分析 PDF，特别是扫描版、图片型、没有文本层、复制文字乱码或普通解析器无法读取的 PDF 时使用；也适用于把 PDF 转成可下载的 Markdown 并保留原始解析 JSON。
+description: 使用内网 MinerU v3 API 将 PDF 或图片解析为结构化 Markdown，支持 OCR、表格、公式和可恢复的异步任务。用户要求读取、提取、OCR、转换、总结或分析 PDF，特别是扫描版、图片型、大文件、长耗时、没有文本层、复制文字乱码或普通解析器无法读取的 PDF 时使用；也适用于把 PDF 转成可下载的 Markdown 并保留原始解析 JSON。
 ---
 
 # 使用 MinerU v3 解析 PDF
 
-通过异步 API 解析文档，等待任务完成，再保存 Markdown 和原始 JSON。服务地址必须由管理员通过 `MINERU_API_URL` 注入；仓库不保存内部主机、端口或凭据。
+通过异步 API 提交文档，并跨多次短调用恢复任务。服务地址必须由管理员通过 `MINERU_API_URL` 注入；仓库不保存内部主机、端口或凭据。
 
 ## 执行流程
 
@@ -16,21 +16,33 @@ description: 使用内网 MinerU v3 API 将 PDF 或图片解析为结构化 Mark
    - 无法判断或混合文档：使用 `--method auto`。
 3. 选择语言。中英混合默认 `ch`；纯英文用 `en`；越南语、法语等拉丁字母语言用 `latin`。完整列表见 [API 参考](references/api.md)。
 4. 从 Agent 工作区根目录运行脚本。输出目录必须放在普通工作目录，不要放到只读的 `skills/` 投影目录。
+5. 始终先 `submit`，再用相同输出目录执行 `resume`。不要在一次工具调用中长时间轮询，不要启动后台进程，也不要重复上传同一文件。
 
 扫描版 PDF 示例：
 
 ```bash
-bash skills/mineru-v3-pdf-parser/scripts/mineru.sh parse \
+python3 skills/mineru-v3-pdf-parser/scripts/mineru.py submit \
   "uploads/contract.pdf" \
   "work/contract-mineru" \
   --method ocr \
   --lang ch
 ```
 
+提交成功会立即返回 `task_id`、`ready: false` 和下一条命令。稍后执行：
+
+```bash
+python3 skills/mineru-v3-pdf-parser/scripts/mineru.py resume \
+  "work/contract-mineru"
+```
+
+若仍在处理，`resume` 返回 `status: pending|processing` 和建议重试间隔，且正常退出；短暂等待后在新的工具调用中再次执行同一命令。若已完成，它会自动保存 Markdown 和 JSON。MinerU 服务持有任务，Agent 不需要保持 Shell 或后台进程运行。
+
+只要用户仍在等待本次解析，就持续用 `resume` 接续，直到 `ready: true`、明确失败或用户取消。不要把 `pending`、`processing` 或一次 Agent 执行超时当成解析失败，也不要只说“后台运行中”便结束任务。
+
 指定页码范围（从 0 开始，包含首尾页）：
 
 ```bash
-bash skills/mineru-v3-pdf-parser/scripts/mineru.sh parse \
+python3 skills/mineru-v3-pdf-parser/scripts/mineru.py submit \
   "uploads/report.pdf" \
   "work/report-pages-1-10" \
   --method auto \
@@ -42,7 +54,7 @@ bash skills/mineru-v3-pdf-parser/scripts/mineru.sh parse \
 服务健康检查：
 
 ```bash
-bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health
+python3 skills/mineru-v3-pdf-parser/scripts/mineru.py health
 ```
 
 ## 检查与交付
@@ -51,12 +63,13 @@ bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health
 
 - `parsed.md`：供阅读、总结和交付的 UTF-8 Markdown。
 - `result.json`：MinerU 完整结果，排障或需要更多结构时使用。
-- `task.json`：任务 ID、状态、后端和时间信息。
+- `submission.json`：首次提交返回的任务 ID；后续恢复以它为准。
+- `task.json`：最近一次查询的状态、后端和时间信息。
 - `request.json`：实际使用的解析选项，不包含凭据。
 
 执行以下检查后再回答用户：
 
-1. 确认脚本输出的 `ok` 为 `true`、`status` 为 `completed`。
+1. 只有 `resume` 输出 `ok: true`、`ready: true`、`status: completed` 后才开始检查和交付。
 2. 对非空白文档，确认 `markdown_chars` 大于 0。
 3. 阅读 `parsed.md` 的开头、中部和结尾；检查标题层级、段落顺序、表格、页眉页脚和 OCR 字符。
 4. 扫描件结果明显缺字或错字时，换用更准确的语言并重跑；中英文使用 `ch`，纯英文使用 `en`。
@@ -67,8 +80,8 @@ bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health
 
 - 默认保留 `hybrid-auto-engine`，它是当前服务的高精度、多语言方案。
 - 默认启用公式和表格识别。只有确认文档不需要时才用 `--formula false` 或 `--table false`。
-- 长文档解析可能需要数分钟。脚本使用异步任务并轮询，默认总超时 30 分钟。
-- `MINERU_API_URL` 是必需配置。通过 `MINERU_TIMEOUT_SECONDS` 和 `MINERU_POLL_INTERVAL_SECONDS` 调整等待行为。
+- 长文档解析可能需要数分钟。每次 `resume` 只查询一次，不占用单次 Agent 执行窗口；任务由 MinerU 服务继续运行。
+- `MINERU_API_URL` 是必需配置。通过 `MINERU_HTTP_TIMEOUT_SECONDS` 调整单次 HTTP 超时，通过 `MINERU_RETRY_AFTER_SECONDS` 调整建议重试间隔。
 - 不要臆测未返回的文字。OCR 质量不足时明确说明，并建议人工核对关键金额、日期、姓名和合同条款。
 
 ## 故障处理
@@ -77,5 +90,6 @@ bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health
 - 健康检查连接失败：当前 Sandbox 无法访问管理员配置的 MinerU 服务，请管理员检查配置、路由、防火墙和 QM Sandbox 网络。
 - HTTP 422：文件或参数不符合 API 定义，检查文件格式、页码和语言值。
 - 任务 `failed`：报告 MinerU 返回的 `error`，保留任务 ID，不要无限重试。
-- 超时：报告任务 ID；先查询任务状态，再决定延长 `MINERU_TIMEOUT_SECONDS`，不要重复提交同一大文件。
+- 单次调用超时：保留 `submission.json` 和任务 ID，直接用同一输出目录运行 `resume`；不要重新 `submit`。
+- 输出目录已有任务：说明该文档已经提交；运行 `resume`，不要删除记录或创建重复任务。
 - Markdown 为空：检查文档是否为空白；扫描件应明确使用 `--method ocr` 并选择正确语言。

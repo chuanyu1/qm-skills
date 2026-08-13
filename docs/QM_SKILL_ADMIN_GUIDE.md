@@ -98,10 +98,11 @@ https://github.com/chuanyu1/qm-skills.git
 
 导入到目标 Scope 后，新建会话并依次验收：
 
-1. 要求 Agent 执行 `bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health`，确认返回 `status: healthy`。
+1. 要求 Agent 执行 `python3 skills/mineru-v3-pdf-parser/scripts/mineru.py health`，确认返回 `status: healthy`。
 2. 上传一份不含敏感信息的扫描测试 PDF，明确要求使用 `--method ocr`。
-3. 确认脚本返回 `status: completed` 且 `markdown_chars` 大于 0。
-4. 确认 Agent 能把 `parsed.md` 作为文件附件交付，而不是只返回 Sandbox 路径。
+3. 确认 Agent 先执行 `submit` 并保存任务 ID，再用 `resume` 接续；不应启动后台进程或因单次等待超时而重复上传。
+4. 确认最终返回 `ready: true`、`status: completed` 且 `markdown_chars` 大于 0。
+5. 确认 Agent 能把 `parsed.md` 作为文件附件交付，而不是只返回 Sandbox 路径。
 
 如果健康检查提示缺少变量，检查 Env var 是否精确填写为 `MINERU_API_URL`、记录是否启用，并新建会话。如果连接失败，检查管理员保存的地址、QM Sandbox 到 MinerU 的路由和防火墙。若以后启用 Egress enforcement，应仅放行实际 MinerU 主机和端口；若 MinerU 后续启用 Token，应通过 QM Service credential Broker 管理，不要把密钥写入 Skill 仓库。
 

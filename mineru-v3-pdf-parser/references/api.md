@@ -17,6 +17,8 @@
 2. `GET /tasks/{task_id}`：返回 `pending`、`processing`、`completed` 或 `failed`。
 3. `GET /tasks/{task_id}/result`：任务完成后取得结果。
 
+Skill 脚本将三步分别实现为 `submit`、`status`、`collect`，并提供 `resume` 执行一次状态查询且在完成时自动收集。`pending` 和 `processing` 是正常结果，不应让 Agent 保持长时间轮询或启动后台 Shell。
+
 同步接口 `POST /file_parse` 接受相同字段，但长文档容易超过单次请求等待时间。
 
 ## 上传字段
