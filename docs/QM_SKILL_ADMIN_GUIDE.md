@@ -79,6 +79,32 @@ https://github.com/chuanyu1/qm-skills.git
 
 `POST /v1/skills` 当前只支持 `name`、`description` 和 `body`。需要脚本或附件的 Skill 仍必须作为 Git Skill Pack 由管理员导入到指定范围。
 
+### 导入 MinerU v3 PDF 解析器
+
+`mineru-v3-pdf-parser` 解析 PDF 和图片，特别适合扫描版 PDF。公开 Skill Pack 不保存内部主机、端口或凭据；管理员必须先配置 `MINERU_API_URL`。
+
+进入 **Admin → Governance → Credentials → Shared service credentials**，添加以下记录：
+
+| 字段 | 配置值 |
+| --- | --- |
+| Slug | `mineru-api-url` |
+| Display name | `MinerU API URL` |
+| Delivery | `Sandbox env` |
+| Env var | `MINERU_API_URL` |
+| Secret | 完整的内部 MinerU 基础地址，不带末尾 `/` |
+| Enabled | 开启 |
+
+保存后新建会话；已运行的 Sandbox 不会自动获得新环境变量。`Sandbox env` 会把该值注入组织内所有内部会话，个人/团队 Grant 不会限制 Env 投递。Skill Scope 只控制 Skill 的发现和物化，不是 MinerU 的访问控制。如果服务地址也需要按用户保密或授权，应改为启用 MinerU 认证并使用 Broker，或在网络层限制来源。
+
+导入到目标 Scope 后，新建会话并依次验收：
+
+1. 要求 Agent 执行 `bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health`，确认返回 `status: healthy`。
+2. 上传一份不含敏感信息的扫描测试 PDF，明确要求使用 `--method ocr`。
+3. 确认脚本返回 `status: completed` 且 `markdown_chars` 大于 0。
+4. 确认 Agent 能把 `parsed.md` 作为文件附件交付，而不是只返回 Sandbox 路径。
+
+如果健康检查提示缺少变量，检查 Env var 是否精确填写为 `MINERU_API_URL`、记录是否启用，并新建会话。如果连接失败，检查管理员保存的地址、QM Sandbox 到 MinerU 的路由和防火墙。若以后启用 Egress enforcement，应仅放行实际 MinerU 主机和端口；若 MinerU 后续启用 Token，应通过 QM Service credential Broker 管理，不要把密钥写入 Skill 仓库。
+
 ### GitHub 链路超时
 
 如果 Status 显示：

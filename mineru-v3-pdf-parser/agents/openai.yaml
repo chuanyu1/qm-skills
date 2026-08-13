@@ -1,0 +1,4 @@
+interface:
+  display_name: "Parse PDFs with MinerU v3"
+  short_description: "Parse scanned PDFs into Markdown with MinerU v3"
+  default_prompt: "Use $mineru-v3-pdf-parser to OCR this scanned PDF and save verified Markdown."

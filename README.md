@@ -16,6 +16,16 @@ Example request after import:
 
 > 请使用 create-skill-for-qm，为我创建一个个人 Skill：在交付网页链接前检查 HTTP 状态、Content-Type 和页面标题，并把平台返回的 Skill ID 和 personal scope 告诉我。
 
+## MinerU v3 PDF parser
+
+The `mineru-v3-pdf-parser` skill parses PDF and image files through the internal MinerU v3 API, with an OCR-first workflow for scanned documents. It submits asynchronous tasks, polls them to completion, and writes verified UTF-8 Markdown plus the raw JSON response and task metadata.
+
+The repository contains no internal hostname, port, or credential. A QM administrator must inject the private service base URL as `MINERU_API_URL` through Sandbox env delivery, then import the Skill into the intended scopes. PDF contents are sent to that configured service, so only upload documents the user explicitly asked to process.
+
+Example request after import:
+
+> 请使用 mineru-v3-pdf-parser 对这份扫描版合同执行 OCR，语言选中英文，输出 Markdown，并检查金额、日期和表格是否识别完整。
+
 ## Tavily search
 
 The `tavily` skill lets an agent search the web through Tavily without exposing the Tavily API key to the sandbox. The script calls QM's service credential broker, which injects the key on the server and enforces the configured user/team grant, hostname, HTTP method, and path restrictions.

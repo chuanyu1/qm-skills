@@ -1,0 +1,81 @@
+---
+name: mineru-v3-pdf-parser
+description: 使用内网 MinerU v3 API 将 PDF 或图片解析为结构化 Markdown，支持 OCR、表格和公式识别。用户要求读取、提取、OCR、转换、总结或分析 PDF，特别是扫描版、图片型、没有文本层、复制文字乱码或普通解析器无法读取的 PDF 时使用；也适用于把 PDF 转成可下载的 Markdown 并保留原始解析 JSON。
+---
+
+# 使用 MinerU v3 解析 PDF
+
+通过异步 API 解析文档，等待任务完成，再保存 Markdown 和原始 JSON。服务地址必须由管理员通过 `MINERU_API_URL` 注入；仓库不保存内部主机、端口或凭据。
+
+## 执行流程
+
+1. 确认用户已要求处理该文件。PDF 会发送到内网 MinerU 服务；不要上传与请求无关的文件。
+2. 判断解析方式：
+   - 扫描件、图片型 PDF、没有文本层或复制乱码：使用 `--method ocr`。
+   - 原生电子 PDF 且只需文本：使用 `--method txt`。
+   - 无法判断或混合文档：使用 `--method auto`。
+3. 选择语言。中英混合默认 `ch`；纯英文用 `en`；越南语、法语等拉丁字母语言用 `latin`。完整列表见 [API 参考](references/api.md)。
+4. 从 Agent 工作区根目录运行脚本。输出目录必须放在普通工作目录，不要放到只读的 `skills/` 投影目录。
+
+扫描版 PDF 示例：
+
+```bash
+bash skills/mineru-v3-pdf-parser/scripts/mineru.sh parse \
+  "uploads/contract.pdf" \
+  "work/contract-mineru" \
+  --method ocr \
+  --lang ch
+```
+
+指定页码范围（从 0 开始，包含首尾页）：
+
+```bash
+bash skills/mineru-v3-pdf-parser/scripts/mineru.sh parse \
+  "uploads/report.pdf" \
+  "work/report-pages-1-10" \
+  --method auto \
+  --lang ch \
+  --start-page 0 \
+  --end-page 9
+```
+
+服务健康检查：
+
+```bash
+bash skills/mineru-v3-pdf-parser/scripts/mineru.sh health
+```
+
+## 检查与交付
+
+脚本成功后检查输出目录：
+
+- `parsed.md`：供阅读、总结和交付的 UTF-8 Markdown。
+- `result.json`：MinerU 完整结果，排障或需要更多结构时使用。
+- `task.json`：任务 ID、状态、后端和时间信息。
+- `request.json`：实际使用的解析选项，不包含凭据。
+
+执行以下检查后再回答用户：
+
+1. 确认脚本输出的 `ok` 为 `true`、`status` 为 `completed`。
+2. 对非空白文档，确认 `markdown_chars` 大于 0。
+3. 阅读 `parsed.md` 的开头、中部和结尾；检查标题层级、段落顺序、表格、页眉页脚和 OCR 字符。
+4. 扫描件结果明显缺字或错字时，换用更准确的语言并重跑；中英文使用 `ch`，纯英文使用 `en`。
+5. 用户要求总结或分析时，以 `parsed.md` 为来源；保留页码范围和 OCR 可能出错的说明。
+6. 用户要求下载时，把 `parsed.md` 作为文件附件交付，不要只贴 Sandbox 路径或不可点击的文字。
+
+## 选项原则
+
+- 默认保留 `hybrid-auto-engine`，它是当前服务的高精度、多语言方案。
+- 默认启用公式和表格识别。只有确认文档不需要时才用 `--formula false` 或 `--table false`。
+- 长文档解析可能需要数分钟。脚本使用异步任务并轮询，默认总超时 30 分钟。
+- `MINERU_API_URL` 是必需配置。通过 `MINERU_TIMEOUT_SECONDS` 和 `MINERU_POLL_INTERVAL_SECONDS` 调整等待行为。
+- 不要臆测未返回的文字。OCR 质量不足时明确说明，并建议人工核对关键金额、日期、姓名和合同条款。
+
+## 故障处理
+
+- 缺少 `MINERU_API_URL`：管理员尚未通过 QM Sandbox env 投递服务地址；不要猜测或硬编码地址。
+- 健康检查连接失败：当前 Sandbox 无法访问管理员配置的 MinerU 服务，请管理员检查配置、路由、防火墙和 QM Sandbox 网络。
+- HTTP 422：文件或参数不符合 API 定义，检查文件格式、页码和语言值。
+- 任务 `failed`：报告 MinerU 返回的 `error`，保留任务 ID，不要无限重试。
+- 超时：报告任务 ID；先查询任务状态，再决定延长 `MINERU_TIMEOUT_SECONDS`，不要重复提交同一大文件。
+- Markdown 为空：检查文档是否为空白；扫描件应明确使用 `--method ocr` 并选择正确语言。
