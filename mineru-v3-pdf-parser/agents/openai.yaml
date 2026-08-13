@@ -1,4 +1,4 @@
 interface:
   display_name: "Parse PDFs with MinerU v3"
-  short_description: "Parse scanned PDFs with resumable MinerU tasks"
-  default_prompt: "Use $mineru-v3-pdf-parser to submit, resume, and verify OCR for this scanned PDF."
+  short_description: "Parse PDFs and bundle Markdown with working images"
+  default_prompt: "Use $mineru-v3-pdf-parser to parse this PDF and deliver a complete Markdown bundle with working images."

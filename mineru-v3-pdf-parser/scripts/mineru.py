@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import mimetypes
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -15,11 +17,14 @@ import sys
 import tempfile
 from typing import Any
 from urllib.parse import urlparse
+import zipfile
 
 
 SCRIPT_PATH = "skills/mineru-v3-pdf-parser/scripts/mineru.py"
 SUPPORTED_BACKENDS = ("pipeline", "vlm-auto-engine", "hybrid-auto-engine")
 SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+DATA_URI_RE = re.compile(r"^data:([^;,]+);base64,(.*)$", re.DOTALL)
+MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))")
 
 
 class MineruError(RuntimeError):
@@ -73,6 +78,107 @@ def write_json(path: Path, value: Any) -> None:
         handle.write("\n")
         temporary = Path(handle.name)
     temporary.replace(path)
+
+
+def write_bytes(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False) as handle:
+        handle.write(value)
+        temporary = Path(handle.name)
+    temporary.replace(path)
+
+
+def safe_image_relative_path(name: str) -> PurePosixPath:
+    normalized = name.strip().replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+    if candidate.is_absolute() or not candidate.parts or any(part in {"", ".", ".."} for part in candidate.parts):
+        raise MineruError(f"MinerU 返回不安全的图片路径: {name!r}")
+    parts = candidate.parts[1:] if candidate.parts[0] == "images" else candidate.parts
+    if not parts or any(":" in part or "\x00" in part for part in parts):
+        raise MineruError(f"MinerU 返回不安全的图片路径: {name!r}")
+    return PurePosixPath(*parts)
+
+
+def decode_image(name: str, payload: Any) -> tuple[str, bytes]:
+    if not isinstance(payload, str) or not payload:
+        raise MineruError(f"MinerU 图片 {name!r} 缺少 base64 字符串")
+    match = DATA_URI_RE.fullmatch(payload)
+    if match:
+        content_type, encoded = match.groups()
+    else:
+        content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        encoded = payload
+    if not content_type.startswith("image/"):
+        raise MineruError(f"MinerU 图片 {name!r} 返回非图片类型: {content_type}")
+    try:
+        decoded = base64.b64decode(re.sub(r"\s+", "", encoded), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise MineruError(f"MinerU 图片 {name!r} 不是有效 base64") from exc
+    if not decoded:
+        raise MineruError(f"MinerU 图片 {name!r} 内容为空")
+    return content_type, decoded
+
+
+def markdown_image_refs(markdown: str) -> set[str]:
+    refs: set[str] = set()
+    for match in MARKDOWN_IMAGE_RE.finditer(markdown):
+        target = (match.group(1) or match.group(2) or "").strip()
+        parsed = urlparse(target)
+        if parsed.scheme or parsed.netloc or target.startswith(("#", "/")):
+            continue
+        normalized = parsed.path.replace("\\", "/").removeprefix("./")
+        if normalized.startswith("images/"):
+            relative = safe_image_relative_path(normalized)
+            refs.add(f"images/{relative.as_posix()}")
+    return refs
+
+
+def materialize_images(result_item: dict[str, Any], output_dir: Path) -> list[dict[str, Any]]:
+    raw_images = result_item.get("images")
+    if raw_images is None:
+        raw_images = {}
+    if not isinstance(raw_images, dict):
+        raise MineruError("MinerU images 不是对象")
+    manifest: list[dict[str, Any]] = []
+    for source_name in sorted(raw_images):
+        relative = safe_image_relative_path(source_name)
+        content_type, decoded = decode_image(source_name, raw_images[source_name])
+        local_relative = PurePosixPath("images") / relative
+        local_path = output_dir.joinpath(*local_relative.parts)
+        write_bytes(local_path, decoded)
+        manifest.append(
+            {
+                "source": source_name,
+                "path": local_relative.as_posix(),
+                "content_type": content_type,
+                "bytes": len(decoded),
+            }
+        )
+    result_item["images"] = {
+        item["source"]: {
+            "saved_to": item["path"],
+            "content_type": item["content_type"],
+            "bytes": item["bytes"],
+        }
+        for item in manifest
+    }
+    return manifest
+
+
+def build_bundle(output_dir: Path, manifest: list[dict[str, Any]]) -> Path:
+    bundle = output_dir / "parsed-with-assets.zip"
+    with tempfile.NamedTemporaryFile("wb", dir=output_dir, prefix=f".{bundle.name}.", suffix=".tmp", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(output_dir / "parsed.md", "parsed.md")
+            for item in manifest:
+                relative = PurePosixPath(item["path"])
+                archive.write(output_dir.joinpath(*relative.parts), relative.as_posix())
+        temporary.replace(bundle)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return bundle
 
 
 def curl_json(method: str, url: str, timeout: int, form: list[str] | None = None) -> tuple[int, dict[str, Any]]:
@@ -169,9 +275,27 @@ def collect_result(base: str, timeout: int, output_dir: Path, task_id: str) -> d
     markdown = first.get("md_content", "")
     if not isinstance(markdown, str):
         raise MineruError("MinerU md_content 不是字符串")
-    write_json(output_dir / "result.json", result)
     (output_dir / "parsed.md").write_text(markdown, encoding="utf-8")
+    manifest = materialize_images(first, output_dir)
+    referenced = markdown_image_refs(markdown)
+    saved = {item["path"] for item in manifest}
+    missing = sorted(referenced - saved)
+    if missing:
+        raise MineruError(f"Markdown 引用了未返回的图片: {', '.join(missing[:10])}")
+    write_json(output_dir / "result.json", result)
+    bundle = build_bundle(output_dir, manifest) if manifest else None
     request = read_json(output_dir / "request.json")
+    files = {
+        "markdown": str(output_dir / "parsed.md"),
+        "result": str(output_dir / "result.json"),
+        "task": str(output_dir / "task.json"),
+        "request": str(output_dir / "request.json"),
+        "submission": str(output_dir / "submission.json"),
+    }
+    if manifest:
+        files["images_dir"] = str(output_dir / "images")
+    if bundle is not None:
+        files["bundle"] = str(bundle)
     return {
         "ok": True,
         "ready": True,
@@ -181,13 +305,9 @@ def collect_result(base: str, timeout: int, output_dir: Path, task_id: str) -> d
         "backend": result.get("backend", "unknown"),
         "parse_method": request.get("parseMethod", "unknown"),
         "markdown_chars": len(markdown),
-        "files": {
-            "markdown": str(output_dir / "parsed.md"),
-            "result": str(output_dir / "result.json"),
-            "task": str(output_dir / "task.json"),
-            "request": str(output_dir / "request.json"),
-            "submission": str(output_dir / "submission.json"),
-        },
+        "image_count": len(manifest),
+        "image_reference_count": len(referenced),
+        "files": files,
     }
 
 
@@ -250,6 +370,7 @@ def submit_task(args: argparse.Namespace, base: str, timeout: int) -> None:
         "languages": languages,
         "formulaEnable": args.formula == "true",
         "tableEnable": args.table == "true",
+        "returnImages": True,
         "startPage": args.start_page,
         "endPage": args.end_page,
     }
@@ -268,7 +389,7 @@ def submit_task(args: argparse.Namespace, base: str, timeout: int) -> None:
             "=return_middle_json=false",
             "=return_model_output=false",
             "=return_content_list=false",
-            "=return_images=false",
+            "=return_images=true",
             "=response_format_zip=false",
             "=return_original_file=false",
             f"=start_page_id={args.start_page}",

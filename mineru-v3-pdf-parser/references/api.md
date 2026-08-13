@@ -35,7 +35,7 @@ Skill 脚本将三步分别实现为 `submit`、`status`、`collect`，并提供
 | `return_middle_json` | `false` | 返回中间 JSON |
 | `return_model_output` | `false` | 返回模型原始输出 |
 | `return_content_list` | `false` | 返回内容列表 |
-| `return_images` | `false` | 返回提取图片 |
+| `return_images` | `true` | 返回提取图片；Skill 固定启用，防止 Markdown 相对链接失效 |
 | `response_format_zip` | `false` | 返回 ZIP 而非 JSON |
 | `return_original_file` | `false` | ZIP 中包含原文件，仅 ZIP 模式有效 |
 | `start_page_id` | `0` | 起始页，从 0 开始 |
@@ -85,10 +85,15 @@ Skill 脚本将三步分别实现为 `submit`、`status`、`collect`，并提供
   "version": "3.0.4",
   "results": {
     "input": {
-      "md_content": "..."
+      "md_content": "![](images/example.jpg)",
+      "images": {
+        "example.jpg": "data:image/jpeg;base64,..."
+      }
     }
   }
 }
 ```
+
+当前 3.0.4 服务实测把 `images` 返回为“文件名到 data URI”的对象。Skill 解码后保存到 `images/`，把 `result.json` 中的 base64 替换为本地路径元数据，并生成 `parsed-with-assets.zip`。Markdown 引用的 `images/...` 若没有对应返回项，Skill 必须报错并阻止残缺交付。
 
 OpenAPI 没有声明成功响应的具体 schema，因此调用方必须检查 JSON 实际字段，而不能只依赖生成客户端类型。
